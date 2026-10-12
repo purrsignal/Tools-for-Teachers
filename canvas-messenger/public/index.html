@@ -1,0 +1,223 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Canvas Messenger</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#667085; --line:#e3e6ea; --accent:#2d6cdf; --ok:#1a7f4b; --err:#b42318; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2e333c; --accent:#6aa0ff; --ok:#4cc38a; --err:#ff7b72; }
+  }
+  * { box-sizing: border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:980px; margin:0 auto; padding:24px 16px 48px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; font-size:13px; }
+  .grid { display:grid; grid-template-columns: 1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid { grid-template-columns:1fr; } }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; }
+  .card h2 { font-size:15px; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; }
+  .tools { display:flex; gap:8px; margin-bottom:8px; }
+  input[type=text], textarea, select { width:100%; padding:8px 10px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  textarea { min-height:220px; resize:vertical; }
+  label.field { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  .list { max-height:420px; overflow:auto; border:1px solid var(--line); border-radius:8px; }
+  .course { display:flex; gap:10px; padding:8px 10px; border-bottom:1px solid var(--line); cursor:pointer; align-items:flex-start; }
+  .course:last-child { border-bottom:0; }
+  .course:hover { background:var(--bg); }
+  .course input { margin-top:4px; }
+  .course .meta { color:var(--muted); font-size:12px; }
+  button { font:inherit; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); padding:7px 12px; cursor:pointer; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; padding:10px 16px; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:12px; align-items:center; justify-content:space-between; margin-top:16px; flex-wrap:wrap; }
+  .count { color:var(--muted); font-size:13px; }
+  .results { margin-top:16px; }
+  .results div { padding:4px 0; }
+  .ok { color:var(--ok); } .err { color:var(--err); }
+  .radio { display:flex; flex-direction:column; gap:6px; font-size:14px; }
+  .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  dialog { border:1px solid var(--line); border-radius:12px; background:var(--card); color:var(--text); max-width:520px; width:calc(100% - 32px); }
+  dialog::backdrop { background:rgba(0,0,0,.4); }
+  dialog ul { padding-left:18px; }
+  .preview { white-space:pre-wrap; background:var(--bg); padding:10px; border-radius:8px; max-height:200px; overflow:auto; font-size:13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Canvas Messenger</h1>
+  <p class="sub" id="sub">Loading your courses…</p>
+
+  <div class="grid">
+    <section class="card">
+      <h2>Courses <span class="count" id="selCount">0 selected</span></h2>
+      <div class="tools">
+        <input type="text" id="filter" placeholder="Filter courses">
+        <button id="all">All</button>
+        <button id="none">None</button>
+      </div>
+      <div class="list" id="list"></div>
+    </section>
+
+    <section class="card">
+      <h2>Message</h2>
+      <label class="field" for="subject">Subject</label>
+      <input type="text" id="subject" maxlength="255">
+      <label class="field" for="body">Message</label>
+      <textarea id="body"></textarea>
+
+      <div id="audienceWrap">
+      <label class="field">Send to</label>
+      <select id="audience">
+        <option value="students">Students</option>
+        <option value="everyone">Everyone in the course</option>
+        <option value="tas">TAs</option>
+        <option value="teachers">Teachers</option>
+      </select>
+      </div>
+
+      <label class="field">Delivery</label>
+      <div class="radio">
+        <label><input type="radio" name="mode" value="individual" checked> Separate message to each person</label>
+        <label><input type="radio" name="mode" value="group"> One group conversation per course</label>
+        <label><input type="radio" name="mode" value="announcement"> Announcement, no replies</label>
+      </div>
+      <div class="hint" id="modeHint"></div>
+    </section>
+  </div>
+
+  <div class="row">
+    <span class="count" id="summary"></span>
+    <button class="primary" id="send" disabled>Review and send</button>
+  </div>
+
+  <div class="results card" id="results" hidden></div>
+</main>
+
+<dialog id="confirm">
+  <h3 style="margin-top:0">Send this message?</h3>
+  <p><strong id="cSubject"></strong></p>
+  <div class="preview" id="cBody"></div>
+  <p id="cAudience"></p>
+  <ul id="cCourses"></ul>
+  <div class="row" style="justify-content:flex-end">
+    <button id="cancel">Cancel</button>
+    <button class="primary" id="go">Send now</button>
+  </div>
+</dialog>
+
+<script>
+const $ = (id) => document.getElementById(id);
+let courses = [];
+const selected = new Set();
+
+function esc(s) { return String(s).replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c])); }
+
+function render() {
+  const q = $("filter").value.toLowerCase();
+  $("list").innerHTML = courses
+    .filter((c) => !q || (c.name + " " + c.code + " " + c.term).toLowerCase().includes(q))
+    .map((c) => `
+      <label class="course">
+        <input type="checkbox" data-id="${c.id}" ${selected.has(c.id) ? "checked" : ""}>
+        <div><div>${esc(c.name)}</div>
+        <div class="meta">${esc([c.code, c.term, c.students != null ? c.students + " students" : ""].filter(Boolean).join(" · "))}</div></div>
+      </label>`).join("") || `<div class="course meta">No courses match.</div>`;
+  update();
+}
+
+function update() {
+  $("selCount").textContent = `${selected.size} selected`;
+  const ready = selected.size && $("subject").value.trim() && $("body").value.trim();
+  $("send").disabled = !ready;
+  const total = courses.filter((c) => selected.has(c.id)).reduce((n, c) => n + (c.students || 0), 0);
+  $("summary").textContent = selected.size ? `${selected.size} course(s), about ${total} students` : "";
+}
+
+$("list").addEventListener("change", (e) => {
+  const id = Number(e.target.dataset.id);
+  e.target.checked ? selected.add(id) : selected.delete(id);
+  update();
+});
+$("filter").addEventListener("input", render);
+$("subject").addEventListener("input", update);
+$("body").addEventListener("input", update);
+$("all").onclick = () => {
+  const q = $("filter").value.toLowerCase();
+  courses.filter((c) => !q || (c.name + " " + c.code + " " + c.term).toLowerCase().includes(q)).forEach((c) => selected.add(c.id));
+  render();
+};
+$("none").onclick = () => { selected.clear(); render(); };
+
+const HINTS = {
+  individual: "Each person gets a private copy in their Canvas Inbox. They can reply, but only to you.",
+  group: "One shared Inbox thread per course. Anyone can reply to everyone.",
+  announcement: "Posted as a course announcement with comments turned off, so students can't reply. Goes to everyone in the course.",
+};
+function mode() { return document.querySelector("input[name=mode]:checked").value; }
+function syncMode() {
+  $("modeHint").textContent = HINTS[mode()];
+  $("audienceWrap").hidden = mode() === "announcement";
+}
+document.querySelectorAll("input[name=mode]").forEach((r) => r.addEventListener("change", syncMode));
+syncMode();
+
+$("send").onclick = () => {
+  const aud = $("audience");
+  $("cSubject").textContent = $("subject").value.trim();
+  $("cBody").textContent = $("body").value;
+  $("cAudience").textContent = mode() === "announcement"
+    ? `Announcement with replies off, in ${selected.size} course(s)`
+    : `To: ${aud.options[aud.selectedIndex].text} in ${selected.size} course(s)`;
+  $("cCourses").innerHTML = courses.filter((c) => selected.has(c.id)).map((c) => `<li>${esc(c.name)}</li>`).join("");
+  $("confirm").showModal();
+};
+$("cancel").onclick = () => $("confirm").close();
+
+$("go").onclick = async () => {
+  $("go").disabled = true;
+  $("go").textContent = "Sending…";
+  try {
+    const res = await fetch("/api/send", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        courseIds: [...selected],
+        subject: $("subject").value,
+        body: $("body").value,
+        audience: $("audience").value,
+        mode: mode(),
+      }),
+    });
+    const data = await res.json();
+    const box = $("results");
+    box.hidden = false;
+    if (!res.ok) {
+      box.innerHTML = `<div class="err">${esc(data.error)}</div>`;
+    } else {
+      const name = (id) => (courses.find((c) => c.id === Number(id)) || { name: id }).name;
+      box.innerHTML = "<h2 style='margin-top:0;font-size:15px'>Results</h2>" + data.results.map((r) =>
+        r.ok ? `<div class="ok">✓ ${esc(name(r.courseId))}: ${mode() === "announcement" ? "posted" : "sent"}</div>`
+             : `<div class="err">✗ ${esc(name(r.courseId))}: ${esc(r.error)}</div>`).join("");
+      if (data.results.every((r) => r.ok)) { $("subject").value = ""; $("body").value = ""; update(); }
+    }
+  } catch (e) {
+    $("results").hidden = false;
+    $("results").innerHTML = `<div class="err">${esc(e.message)}</div>`;
+  } finally {
+    $("go").disabled = false;
+    $("go").textContent = "Send now";
+    $("confirm").close();
+  }
+};
+
+fetch("/api/courses").then((r) => r.json()).then((data) => {
+  if (data.error) throw new Error(data.error);
+  courses = data.courses;
+  $("sub").textContent = `${courses.length} active courses where you teach, from ${data.canvas}`;
+  render();
+}).catch((e) => { $("sub").innerHTML = `<span class="err">Couldn't load courses: ${esc(e.message)}</span>`; });
+</script>
+</body>
+</html>
