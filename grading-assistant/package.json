@@ -1,0 +1,13 @@
+{
+  "name": "grading-assistant",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Local web app that pulls Canvas submissions, drafts grades and feedback with Claude, and exports a score sheet",
+  "scripts": { "start": "node server.js" },
+  "engines": { "node": ">=18" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.133.0",
+    "exceljs": "^4.4.0",
+    "mammoth": "^1.8.0"
+  }
+}

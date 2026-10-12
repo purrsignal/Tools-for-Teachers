@@ -1,0 +1,525 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Grading Assistant</title>
+<style>
+  :root { --bg:#f6f7f9; --card:#fff; --text:#1d2330; --muted:#667085; --line:#e3e6ea; --accent:#2d6cdf; --ok:#1a7f4b; --warn:#a15c00; --err:#b42318; --chip:#eef2f8; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg:#14171c; --card:#1d2128; --text:#e8eaee; --muted:#9aa3af; --line:#2e333c; --accent:#6aa0ff; --ok:#4cc38a; --warn:#f0b35a; --err:#ff7b72; --chip:#262b34; }
+  }
+  * { box-sizing:border-box; }
+  body { margin:0; font:15px/1.5 system-ui,-apple-system,Segoe UI,Roboto,sans-serif; background:var(--bg); color:var(--text); }
+  main { max-width:1100px; margin:0 auto; padding:24px 16px 64px; }
+  h1 { font-size:22px; margin:0 0 4px; }
+  .sub { color:var(--muted); margin:0 0 20px; font-size:13px; }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:16px; margin-bottom:16px; }
+  .card h2 { font-size:16px; margin:0 0 12px; display:flex; justify-content:space-between; align-items:center; gap:8px; flex-wrap:wrap; }
+  .grid2 { display:grid; grid-template-columns:1fr 1fr; gap:16px; }
+  @media (max-width:760px) { .grid2 { grid-template-columns:1fr; } }
+  input[type=text], input[type=number], textarea, select { width:100%; padding:7px 9px; border:1px solid var(--line); border-radius:8px; background:var(--bg); color:var(--text); font:inherit; }
+  input[type=number] { width:80px; }
+  textarea { min-height:70px; resize:vertical; }
+  label.field { display:block; font-size:13px; color:var(--muted); margin:12px 0 4px; }
+  button { font:inherit; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); padding:6px 12px; cursor:pointer; }
+  .card h2 button { font-size:14px; }
+  button.primary { background:var(--accent); border-color:var(--accent); color:#fff; font-weight:600; }
+  button.small { padding:3px 8px; font-size:13px; }
+  button:disabled { opacity:.5; cursor:not-allowed; }
+  .row { display:flex; gap:8px; align-items:center; flex-wrap:wrap; }
+  .hint { color:var(--muted); font-size:12px; margin-top:4px; }
+  .ok { color:var(--ok); } .warn { color:var(--warn); } .err { color:var(--err); }
+  .ref { border:1px dashed var(--line); border-radius:8px; padding:10px; }
+  .ref .name { font-weight:600; }
+  .ref.done { border-style:solid; border-color:var(--ok); }
+  .crit { display:grid; grid-template-columns:1fr 90px 30px; gap:6px; margin-bottom:6px; }
+  .ded { display:grid; grid-template-columns:auto 1fr; gap:6px 10px; align-items:center; }
+  .ded input[type=text]:disabled { opacity:.4; }
+  table { width:100%; border-collapse:collapse; }
+  th, td { text-align:left; padding:7px 8px; border-bottom:1px solid var(--line); vertical-align:top; }
+  th { font-size:12px; color:var(--muted); font-weight:600; }
+  tr.srow { cursor:pointer; }
+  tr.srow:hover td { background:var(--bg); }
+  tr.open td { background:var(--bg); }
+  .chip { display:inline-block; font-size:12px; padding:1px 8px; border-radius:20px; background:var(--chip); }
+  .detail { padding:12px 4px 16px; }
+  .scores { display:grid; grid-template-columns:minmax(160px,1.2fr) 110px 2fr; gap:6px 10px; align-items:start; margin-bottom:8px; }
+  .scores .c { font-size:13px; color:var(--muted); }
+  .files a { margin-right:10px; }
+  #toast { position:fixed; bottom:16px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg); padding:8px 14px; border-radius:8px; font-size:14px; display:none; max-width:90%; }
+  .banner { background:var(--chip); border-radius:8px; padding:8px 12px; font-size:13px; margin-bottom:12px; }
+  .hidden { display:none; }
+  #viewer { position:fixed; inset:0; background:var(--bg); z-index:10; display:none; flex-direction:column; }
+  #viewer.on { display:flex; }
+  #viewer .vbar { display:flex; gap:8px; align-items:center; padding:8px 12px; border-bottom:1px solid var(--line); background:var(--card); flex-wrap:wrap; }
+  #viewer .vbar .who { font-weight:600; margin-right:8px; }
+  #viewer .tabs { display:flex; gap:4px; flex-wrap:wrap; flex:1; }
+  #viewer .tabs button.on { background:var(--accent); border-color:var(--accent); color:#fff; }
+  #viewer .vbody { flex:1; display:grid; grid-template-columns:1fr 480px; min-height:0; }
+  #viewer iframe { width:100%; height:100%; border:0; background:#fff; }
+  #vpane { overflow:auto; padding:4px 16px 24px; border-left:1px solid var(--line); background:var(--card); }
+  #vpane .scores { grid-template-columns:1fr 130px; }
+  #vpane .scores .row { flex-wrap:nowrap; }
+  #vpane .scores .c { grid-column:1 / -1; margin:-4px 0 6px; }
+  @media (max-width:900px) { #viewer .vbody { grid-template-columns:1fr; grid-template-rows:55vh auto; } #vpane { border-left:0; border-top:1px solid var(--line); } }
+  .filelink { background:none; border:0; padding:0; color:var(--accent); text-decoration:underline; cursor:pointer; font-size:inherit; }
+</style>
+</head>
+<body>
+<main>
+  <h1>Grading Assistant</h1>
+  <p class="sub">Pulls submissions from Canvas, drafts scores and brief feedback with Claude, and exports a score sheet. Nothing is posted to Canvas.</p>
+
+  <section class="card">
+    <h2>1. Assignment</h2>
+    <div class="grid2">
+      <div><label class="field">Course</label><select id="course"><option>Loading courses…</option></select></div>
+      <div><label class="field">Assignment</label><select id="assignment" disabled><option>Pick a course first</option></select></div>
+    </div>
+    <div class="row" style="margin-top:12px">
+      <button class="primary" id="sync" disabled>Load submissions from Canvas</button>
+      <span id="syncMsg" class="hint"></span>
+    </div>
+  </section>
+
+  <div id="work" class="hidden">
+  <section class="card">
+    <h2>2. Grading setup <span id="saveMsg" class="hint"></span></h2>
+    <div class="grid2">
+      <div>
+        <label class="field">Rubric (optional)</label>
+        <div class="ref" id="ref-rubric"></div>
+      </div>
+      <div>
+        <label class="field">Solution (optional)</label>
+        <div class="ref" id="ref-solution"></div>
+      </div>
+    </div>
+
+    <div class="grid2" style="margin-top:8px">
+      <div>
+        <label class="field">Criteria and points (these become the spreadsheet columns)</label>
+        <div id="criteria"></div>
+        <div class="row">
+          <button class="small" id="addCrit">+ Add criterion</button>
+          <button class="small" id="suggest">Suggest from rubric and solution</button>
+          <span id="critTotal" class="hint"></span>
+        </div>
+      </div>
+      <div>
+        <label class="field">Deductions (off means no points taken for it)</label>
+        <div class="ded" id="deductions"></div>
+        <label class="field">Your instructions for grading</label>
+        <textarea id="instructions" placeholder="e.g. Step 9 is not graded. Accept any valid design that stays consistent. Be lenient on ERD notation."></textarea>
+      </div>
+    </div>
+  </section>
+
+  <section class="card">
+    <h2>
+      <span>3. Students <span id="counts" class="hint"></span></span>
+      <span class="row">
+        <button class="primary" id="gradeNew">Grade ungraded</button>
+        <button id="gradeSel">Grade selected</button>
+        <button id="exportBtn">Export spreadsheet</button>
+      </span>
+    </h2>
+    <div id="progress" class="banner hidden"></div>
+    <table>
+      <thead><tr><th><input type="checkbox" id="selAll"></th><th>Student</th><th>Submitted</th><th>Files</th><th>Score</th><th>Reviewed</th></tr></thead>
+      <tbody id="students"></tbody>
+    </table>
+  </section>
+  </div>
+</main>
+<div id="viewer">
+  <div class="vbar">
+    <button id="vprev" title="Previous student">‹ Prev</button>
+    <button id="vnext" title="Next student">Next ›</button>
+    <span class="who" id="vwho"></span>
+    <div class="tabs" id="vtabs"></div>
+    <button id="vclose">Close (Esc)</button>
+  </div>
+  <div class="vbody">
+    <iframe id="vframe" title="Submitted file"></iframe>
+    <div id="vpane"></div>
+  </div>
+</div>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;" }[c]));
+let canvasBase = "";
+let job = null;
+let openId = null;
+const selected = new Set();
+const busy = new Set();
+
+async function api(path, body) {
+  const res = await fetch(path, body ? { method:"POST", headers:{ "Content-Type":"application/json" }, body:JSON.stringify(body) } : {});
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || `Error ${res.status}`);
+  return data;
+}
+function toast(msg) {
+  const t = $("toast"); t.textContent = msg; t.style.display = "block";
+  clearTimeout(toast._t); toast._t = setTimeout(() => (t.style.display = "none"), 3500);
+}
+const ids = () => ({ courseId: job.courseId, assignmentId: job.assignmentId });
+
+// ---- step 1 ----
+async function loadCourses() {
+  try {
+    const { canvas, courses } = await api("/api/courses");
+    canvasBase = canvas;
+    $("course").innerHTML = `<option value="">Choose a course…</option>` +
+      courses.map((c) => `<option value="${c.id}">${esc(c.name)}${c.term ? " · " + esc(c.term) : ""}</option>`).join("");
+  } catch (e) { $("course").innerHTML = `<option>Could not load courses: ${esc(e.message)}</option>`; }
+}
+$("course").onchange = async () => {
+  const id = $("course").value;
+  $("assignment").disabled = true; $("sync").disabled = true;
+  if (!id) return;
+  $("assignment").innerHTML = "<option>Loading…</option>";
+  try {
+    const { assignments } = await api(`/api/assignments?courseId=${id}`);
+    $("assignment").innerHTML = `<option value="">Choose an assignment…</option>` +
+      assignments.map((a) => `<option value="${a.id}">${esc(a.name)}${a.points != null ? ` (${a.points} pts)` : ""}${a.needsGrading ? ` · ${a.needsGrading} to grade` : ""}</option>`).join("");
+    $("assignment").disabled = false;
+  } catch (e) { $("assignment").innerHTML = `<option>${esc(e.message)}</option>`; }
+};
+$("assignment").onchange = async () => {
+  $("sync").disabled = !$("assignment").value;
+  if (!$("assignment").value) return;
+  const { job: saved } = await api(`/api/job?courseId=${$("course").value}&assignmentId=${$("assignment").value}`);
+  if (saved) { setJob(saved); $("syncMsg").textContent = `Opened your saved work from ${new Date(saved.updatedAt).toLocaleString()}. Load again to pick up new submissions.`; }
+  else { $("work").classList.add("hidden"); $("syncMsg").textContent = ""; }
+};
+$("sync").onclick = async () => {
+  $("sync").disabled = true; $("syncMsg").textContent = "Loading submissions…";
+  try {
+    const { job: j } = await api("/api/sync", { courseId: $("course").value, assignmentId: $("assignment").value });
+    setJob(j);
+    const n = j.students.filter((s) => s.submitted).length;
+    $("syncMsg").textContent = `${n} submission${n === 1 ? "" : "s"} from ${j.students.length} students.`;
+  } catch (e) { $("syncMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+  $("sync").disabled = false;
+};
+
+function setJob(j) {
+  job = j; selected.clear();
+  $("work").classList.remove("hidden");
+  renderSetup(); renderStudents();
+}
+
+// ---- step 2 ----
+function fmtSize(n) { return n == null ? "" : n < 1024 ? `${n} B` : n < 1048576 ? `${Math.round(n / 1024)} KB` : `${(n / 1048576).toFixed(1)} MB`; }
+function renderRef(field, state) {
+  const box = $(`ref-${field}`);
+  const r = job.setup[field];
+  box.classList.toggle("done", !!r && !state);
+  if (state && state.uploading) {
+    box.innerHTML = `<div class="name">Uploading ${esc(state.uploading)}…</div><div class="hint">Reading the file, this can take a few seconds.</div>`;
+    return;
+  }
+  const err = state && state.error ? `<div class="err" style="margin-top:6px">${esc(state.error)}</div>` : "";
+  const kind = r ? (r.kind === "pdf" ? "PDF" : r.kind === "image" ? "Image" : r.name === "pasted text" ? "Pasted text" : "Text") : "";
+  box.innerHTML = r
+    ? `<div class="ok" style="font-weight:600">✓ ${field === "rubric" ? "Rubric" : "Solution"} ${r.name === "pasted text" ? "added" : "uploaded"}</div>
+       <div class="name">${esc(r.name)}</div>
+       <div class="hint">${kind}${r.size != null ? " · " + fmtSize(r.size) : ""}${r.chars != null ? " · " + r.chars.toLocaleString() + " characters read" : ""}${r.uploadedAt ? " · " + new Date(r.uploadedAt).toLocaleString() : ""}</div>
+       ${r.chars === 0 ? `<div class="warn" style="margin-top:4px">No text could be read from this file. Try a PDF, or paste the text.</div>` : ""}
+       ${err}<div class="row" style="margin-top:6px"><button class="small" data-act="replace">Replace</button><button class="small" data-act="remove">Remove</button></div>`
+    : `<div class="hint">None. Upload a PDF, Word, text or Markdown file, or paste it.</div>
+       ${err}<div class="row" style="margin-top:6px"><button class="small" data-act="replace">Upload file</button><button class="small" data-act="paste">Paste text</button></div>`;
+  box.querySelectorAll("button").forEach((b) => (b.onclick = () => refAction(field, b.dataset.act)));
+}
+// One hidden file picker per field, kept in the page (Safari ignores pickers that aren't).
+function filePicker(field) {
+  let input = $(`pick-${field}`);
+  if (!input) {
+    input = document.createElement("input");
+    input.type = "file"; input.id = `pick-${field}`; input.style.display = "none";
+    document.body.appendChild(input);
+    input.addEventListener("change", async () => {
+      const f = input.files[0]; input.value = "";
+      if (!f) return;
+      renderRef(field, { uploading: f.name });
+      try {
+        const data = await new Promise((ok, bad) => { const r = new FileReader(); r.onload = () => ok(String(r.result).split(",")[1] || ""); r.onerror = () => bad(new Error("Could not read the file.")); r.readAsDataURL(f); });
+        applyJob(await api("/api/reference", { ...ids(), field, name: f.name, data }));
+        toast(`${field === "rubric" ? "Rubric" : "Solution"} uploaded: ${f.name}`);
+      } catch (e) { renderRef(field, { error: `Upload failed: ${e.message}` }); }
+    });
+  }
+  return input;
+}
+async function refAction(field, act) {
+  if (act === "replace") return filePicker(field).click();
+  try {
+    if (act === "remove") return applyJob(await api("/api/reference", { ...ids(), field, remove: true }));
+    if (act === "paste") {
+      const box = $(`ref-${field}`);
+      box.classList.remove("done");
+      box.innerHTML = `<textarea style="min-height:140px" placeholder="Paste the ${field} here"></textarea><div class="row" style="margin-top:6px"><button class="small primary">Save</button><button class="small">Cancel</button></div>`;
+      const [save, cancel] = box.querySelectorAll("button");
+      cancel.onclick = () => renderRef(field);
+      save.onclick = async () => {
+        try { applyJob(await api("/api/reference", { ...ids(), field, text: box.querySelector("textarea").value })); toast("Saved."); }
+        catch (e) { toast(e.message); }
+      };
+    }
+  } catch (e) { renderRef(field, { error: e.message }); }
+}
+function applyJob(r) { job = r.job; renderSetup(); renderStudents(); }
+
+const DED = [
+  ["late", "Late submission", "e.g. 10% per day"],
+  ["ai", "AI use", "e.g. -5 if AI use is not disclosed"],
+  ["overscope", "Over-scoping", "e.g. -2 for extra entities not asked for"],
+  ["multifile", "Multiple files", "e.g. -2 if not one combined file"],
+];
+function renderSetup() {
+  renderRef("rubric"); renderRef("solution");
+  renderCriteria();
+  $("deductions").innerHTML = DED.map(([k, label, ph]) => {
+    const d = job.setup.deductions[k] || {};
+    return `<label class="row" style="gap:6px"><input type="checkbox" data-k="${k}" ${d.on ? "checked" : ""}> ${label}</label>
+            <input type="text" data-how="${k}" placeholder="${ph}" value="${esc(d.how)}" ${d.on ? "" : "disabled"}>`;
+  }).join("");
+  $("deductions").querySelectorAll("input").forEach((el) => (el.oninput = () => {
+    if (el.dataset.k) $("deductions").querySelector(`[data-how=${el.dataset.k}]`).disabled = !el.checked;
+    saveSetupSoon();
+  }));
+  $("instructions").value = job.setup.instructions || "";
+}
+function renderCriteria() {
+  const list = job.setup.criteria;
+  $("criteria").innerHTML = list.length ? list.map((c, i) => `
+    <div class="crit"><input type="text" data-i="${i}" data-f="name" value="${esc(c.name)}" placeholder="Criterion">
+    <input type="number" data-i="${i}" data-f="points" value="${c.points}" min="0" step="0.5">
+    <button class="small" data-del="${i}" title="Remove">✕</button></div>`).join("")
+    : `<div class="hint" style="margin-bottom:8px">No criteria yet. Use "Suggest from rubric and solution" or add them yourself.</div>`;
+  $("criteria").querySelectorAll("input").forEach((el) => (el.oninput = () => {
+    const c = job.setup.criteria[el.dataset.i];
+    c[el.dataset.f] = el.dataset.f === "points" ? Number(el.value) || 0 : el.value;
+    critTotal(); saveSetupSoon();
+  }));
+  $("criteria").querySelectorAll("[data-del]").forEach((b) => (b.onclick = () => {
+    job.setup.criteria.splice(Number(b.dataset.del), 1); renderCriteria(); saveSetupSoon();
+  }));
+  critTotal();
+}
+function critTotal() {
+  const t = job.setup.criteria.reduce((a, c) => a + (Number(c.points) || 0), 0);
+  const pp = job.pointsPossible;
+  $("critTotal").innerHTML = job.setup.criteria.length ? `Total ${t}${pp != null && t !== pp ? ` <span class="warn">(Canvas says ${pp})</span>` : ""}` : "";
+}
+$("addCrit").onclick = () => { job.setup.criteria.push({ name: "", points: 0 }); renderCriteria(); };
+$("suggest").onclick = async () => {
+  if (job.setup.criteria.length && !confirm("Replace the current criteria with suggested ones?")) return;
+  $("suggest").disabled = true; $("suggest").textContent = "Reading rubric…";
+  try { await saveSetup(); const { criteria } = await api("/api/suggest-criteria", ids()); job.setup.criteria = criteria; renderCriteria(); await saveSetup(); }
+  catch (e) { toast(e.message); }
+  $("suggest").disabled = false; $("suggest").textContent = "Suggest from rubric and solution";
+};
+$("instructions").oninput = () => saveSetupSoon();
+
+let saveTimer;
+function saveSetupSoon() { $("saveMsg").textContent = "Saving…"; clearTimeout(saveTimer); saveTimer = setTimeout(saveSetup, 600); }
+async function saveSetup() {
+  clearTimeout(saveTimer);
+  const deductions = {};
+  DED.forEach(([k]) => {
+    deductions[k] = { on: $("deductions").querySelector(`[data-k=${k}]`).checked, how: $("deductions").querySelector(`[data-how=${k}]`).value };
+  });
+  const setup = { instructions: $("instructions").value, criteria: job.setup.criteria.filter((c) => String(c.name).trim()), deductions };
+  try { const r = await api("/api/setup", { ...ids(), setup }); job.setup = r.job.setup; $("saveMsg").textContent = "Saved"; }
+  catch (e) { $("saveMsg").innerHTML = `<span class="err">${esc(e.message)}</span>`; }
+}
+
+// ---- step 3 ----
+const total = (s) => s.grade ? s.grade.criteria.reduce((a, c) => a + (Number(c.points_earned) || 0), 0) : null;
+const maxTotal = () => job.setup.criteria.reduce((a, c) => a + (Number(c.points) || 0), 0);
+function statusChip(s) {
+  if (!s.submitted) return `<span class="chip">Missing</span>`;
+  return s.late ? `<span class="chip warn">Late ${Math.ceil(s.secondsLate / 86400)}d</span>` : `<span class="chip ok">On time</span>`;
+}
+function scoreCell(s) {
+  if (busy.has(s.userId)) return `<span class="hint">Grading…</span>`;
+  if (s.error) return `<span class="err" title="${esc(s.error)}">Failed</span>`;
+  if (!s.grade) return s.submitted ? `<span class="hint">Not graded</span>` : "";
+  return `${total(s)} / ${maxTotal()}${s.resubmitted ? ` <span class="chip warn">Resubmitted</span>` : ""}`;
+}
+function renderStudents() {
+  const st = job.students;
+  const graded = st.filter((s) => s.grade).length, subs = st.filter((s) => s.submitted).length, rev = st.filter((s) => s.reviewed).length;
+  $("counts").textContent = `${subs} submitted · ${graded} graded · ${rev} reviewed`;
+  $("students").innerHTML = st.map((s) => `
+    <tr class="srow ${openId === s.userId ? "open" : ""}" data-id="${s.userId}">
+      <td><input type="checkbox" data-sel="${s.userId}" ${selected.has(s.userId) ? "checked" : ""} ${s.submitted ? "" : "disabled"}></td>
+      <td>${esc(s.sortableName || s.name)}</td>
+      <td>${statusChip(s)}</td>
+      <td>${s.files.length || (s.body ? "text" : s.url ? "link" : "")}</td>
+      <td>${scoreCell(s)}</td>
+      <td>${s.grade ? (s.reviewed ? `<span class="ok">✓</span>` : "") : ""}</td>
+    </tr>${openId === s.userId && viewing == null ? `<tr><td colspan="6">${detail(s)}</td></tr>` : ""}`).join("");
+  $("students").querySelectorAll("tr.srow").forEach((tr) => (tr.onclick = (e) => {
+    if (e.target.matches("input")) return;
+    const id = Number(tr.dataset.id); openId = openId === id ? null : id; renderStudents();
+  }));
+  $("students").querySelectorAll("[data-sel]").forEach((cb) => (cb.onchange = () => {
+    const id = Number(cb.dataset.sel); cb.checked ? selected.add(id) : selected.delete(id);
+  }));
+  if (openId != null && viewing == null) wireDetail(st.find((s) => s.userId === openId));
+}
+function speedGrader(s) { return `${canvasBase}/courses/${job.courseId}/gradebook/speed_grader?assignment_id=${job.assignmentId}&student_id=${s.userId}`; }
+function detail(s) {
+  const links = [
+    ...(s.body || s.url ? [`<button class="filelink" data-view="text">${s.body ? "Text entry" : "Submitted link"}</button>`] : []),
+    ...s.files.map((f, i) => `<button class="filelink" data-view="${i}">${esc(f.name)}</button>`),
+  ];
+  const files = links.join(", ") || "Nothing submitted";
+  const g = s.grade;
+  const scores = g ? `<div class="scores">${g.criteria.map((c, i) => `
+      <div>${esc(c.name)}</div>
+      <div class="row" style="gap:4px"><input type="number" data-pt="${i}" value="${c.points_earned}" min="0" max="${c.points_possible}" step="0.5"> / ${c.points_possible}</div>
+      <div class="c">${esc(c.comment)}</div>`).join("")}
+      <div><b>Total</b></div><div><b id="dtotal">${total(s)}</b> / ${maxTotal()}</div><div></div></div>
+    <label class="field">Feedback for the student</label><textarea id="dfb" style="min-height:110px">${esc(g.feedback)}</textarea>
+    <label class="field">Notes for you (not for the student)</label><textarea id="dnotes">${esc(g.instructorNotes)}</textarea>`
+    : `<p class="hint">${s.error ? `<span class="err">${esc(s.error)}</span>` : "Not graded yet."}</p>`;
+  return `<div class="detail">
+    <div class="row hint" style="margin-bottom:10px">${viewing == null && links.length ? `<button class="small" data-view="${s.files.length ? 0 : "text"}">View side by side</button> ` : ""}Files: ${files} · <a href="${speedGrader(s)}" target="_blank" rel="noopener">Open in SpeedGrader</a>${g ? ` · Graded ${new Date(g.gradedAt).toLocaleString()}` : ""}</div>
+    ${scores}
+    <label class="field">Your comments for grading this student (Claude follows these when you regrade)</label>
+    <textarea id="dteach" placeholder="e.g. Their ERD is on page 3. Give full credit for step 5, the arc is drawn differently but correct.">${esc(s.teacherNotes)}</textarea>
+    <div class="row" style="margin-top:10px">
+      ${s.submitted ? `<button class="primary" id="dgrade">${g ? "Regrade with my comments" : "Grade"}</button>` : ""}
+      ${g ? `<button id="dcopy">Copy feedback</button><label class="row" style="gap:6px"><input type="checkbox" id="drev" ${s.reviewed ? "checked" : ""}> Reviewed</label>` : ""}
+      <span id="dmsg" class="hint"></span>
+    </div></div>`;
+}
+function wireDetail(s) {
+  const patchSoon = (patch) => { clearTimeout(wireDetail.t); $("dmsg").textContent = "Saving…"; wireDetail.t = setTimeout(() => patchStudent(s, patch()), 500); };
+  const collect = () => ({
+    teacherNotes: $("dteach").value,
+    ...(s.grade ? { feedback: $("dfb").value, instructorNotes: $("dnotes").value, points: [...document.querySelectorAll("[data-pt]")].map((el) => el.value) } : {}),
+  });
+  ["dteach", "dfb", "dnotes"].forEach((id) => $(id) && ($(id).oninput = () => patchSoon(collect)));
+  document.querySelectorAll("[data-pt]").forEach((el) => (el.oninput = () => {
+    const i = Number(el.dataset.pt); s.grade.criteria[i].points_earned = Number(el.value) || 0;
+    $("dtotal").textContent = total(s); patchSoon(collect);
+  }));
+  if ($("dgrade")) $("dgrade").onclick = async () => { clearTimeout(wireDetail.t); await patchStudent(s, collect()); gradeMany([s.userId]); };
+  if ($("dcopy")) $("dcopy").onclick = async () => { await navigator.clipboard.writeText($("dfb").value); toast("Feedback copied. Paste it into SpeedGrader."); };
+  document.querySelectorAll(".detail [data-view]").forEach((b) => (b.onclick = (e) => { e.stopPropagation(); openViewer(s.userId, b.dataset.view); }));
+  if ($("drev")) $("drev").onchange = async () => { await patchStudent(s, { ...collect(), reviewed: $("drev").checked }); renderStudents(); if (viewing != null) renderPane(); };
+}
+async function patchStudent(s, patch) {
+  try {
+    const { student } = await api("/api/student", { ...ids(), userId: s.userId, patch });
+    Object.assign(s, student);
+    if ($("dmsg")) $("dmsg").textContent = "Saved";
+    const graded = job.students.filter((x) => x.grade).length;
+    $("counts").textContent = `${job.students.filter((x) => x.submitted).length} submitted · ${graded} graded · ${job.students.filter((x) => x.reviewed).length} reviewed`;
+  } catch (e) { toast(e.message); }
+}
+
+// Re-render the list, unless you're typing in an open student's details.
+function refresh() {
+  const a = document.activeElement;
+  if (a && a.matches("textarea, input[type=number]") && a.closest(".detail")) return;
+  renderStudents();
+  if (viewing != null) renderPane();
+}
+
+// ---- side-by-side viewer: the submitted file on the left, the grade on the right ----
+let viewing = null, viewingFile = null;
+function openViewer(userId, which) {
+  viewing = userId; viewingFile = String(which);
+  openId = null; renderStudents();
+  $("viewer").classList.add("on"); document.body.style.overflow = "hidden";
+  showViewer();
+}
+function showViewer() {
+  const s = job.students.find((x) => x.userId === viewing);
+  $("vwho").textContent = s.name;
+  const tabs = [
+    ...(s.body || s.url ? [["text", s.body ? "Text entry" : "Submitted link"]] : []),
+    ...s.files.map((f, i) => [String(i), f.name]),
+  ];
+  if (!tabs.find(([k]) => k === viewingFile)) viewingFile = tabs.length ? tabs[0][0] : null;
+  $("vtabs").innerHTML = tabs.map(([k, label]) => `<button class="small ${k === viewingFile ? "on" : ""}" data-tab="${k}">${esc(label)}</button>`).join("") || `<span class="hint">Nothing submitted</span>`;
+  $("vtabs").querySelectorAll("[data-tab]").forEach((b) => (b.onclick = () => { viewingFile = b.dataset.tab; showViewer(); }));
+  const src = viewingFile == null ? "about:blank" : `/api/file?courseId=${job.courseId}&assignmentId=${job.assignmentId}&userId=${s.userId}&which=${viewingFile}`;
+  if ($("vframe").getAttribute("src") !== src) $("vframe").setAttribute("src", src);
+  const list = job.students.filter((x) => x.submitted);
+  const i = list.findIndex((x) => x.userId === viewing);
+  $("vprev").disabled = i <= 0; $("vnext").disabled = i < 0 || i >= list.length - 1;
+  renderPane();
+}
+function renderPane() {
+  const s = job.students.find((x) => x.userId === viewing);
+  if (!s) return;
+  $("vpane").innerHTML = `<h3 style="margin:12px 0 4px">${esc(s.name)} ${statusChip(s)}</h3>` + detail(s);
+  wireDetail(s);
+}
+function stepViewer(d) {
+  const list = job.students.filter((x) => x.submitted);
+  const i = list.findIndex((x) => x.userId === viewing);
+  const next = list[i + d]; if (!next) return;
+  viewing = next.userId; viewingFile = null; showViewer();
+}
+function closeViewer() {
+  $("viewer").classList.remove("on"); document.body.style.overflow = "";
+  openId = viewing; viewing = null; $("vframe").setAttribute("src", "about:blank"); renderStudents();
+}
+$("vclose").onclick = closeViewer;
+$("vprev").onclick = () => stepViewer(-1);
+$("vnext").onclick = () => stepViewer(1);
+document.addEventListener("keydown", (e) => { if (e.key === "Escape" && viewing != null) closeViewer(); });
+
+async function gradeMany(userIds) {
+  if (!job.setup.criteria.length) return toast("Add the criteria in step 2 first.");
+  await saveSetup();
+  userIds = userIds.filter((id) => !busy.has(id));
+  if (!userIds.length) return;
+  userIds.forEach((id) => busy.add(id));
+  let done = 0, failed = 0;
+  const prog = $("progress");
+  const show = () => { prog.classList.remove("hidden"); prog.textContent = `Grading ${done + failed} of ${userIds.length}…${failed ? ` ${failed} failed.` : ""}`; };
+  show(); renderStudents();
+  const queue = [...userIds];
+  async function worker() {
+    while (queue.length) {
+      const id = queue.shift();
+      const s = job.students.find((x) => x.userId === id);
+      try { const { student } = await api("/api/grade", { ...ids(), userId: id }); Object.assign(s, student); delete s.error; done++; }
+      catch (e) { s.error = e.message; failed++; }
+      busy.delete(id); show(); refresh();
+    }
+  }
+  await Promise.all([worker(), worker(), worker()]);
+  prog.textContent = `Finished: ${done} graded${failed ? `, ${failed} failed (open the student to see why)` : ""}. Review each one before you post it in Canvas.`;
+}
+$("gradeNew").onclick = () => gradeMany(job.students.filter((s) => s.submitted && (!s.grade || s.resubmitted)).map((s) => s.userId));
+$("gradeSel").onclick = () => {
+  if (!selected.size) return toast("Tick the students to grade first.");
+  const withGrade = [...selected].filter((id) => job.students.find((s) => s.userId === id)?.grade).length;
+  if (withGrade && !confirm(`${withGrade} of these already have a draft. Regrade them? Your edits to their scores and feedback will be replaced.`)) return;
+  gradeMany([...selected]);
+};
+$("selAll").onchange = () => {
+  selected.clear();
+  if ($("selAll").checked) job.students.filter((s) => s.submitted).forEach((s) => selected.add(s.userId));
+  renderStudents();
+};
+$("exportBtn").onclick = () => { location.href = `/api/export?courseId=${job.courseId}&assignmentId=${job.assignmentId}`; };
+
+loadCourses();
+</script>
+</body>
+</html>
